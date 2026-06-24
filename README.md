@@ -14,7 +14,7 @@ This repository is being built **phase by phase**. The current state is:
 | Phase | Scope | Status |
 |------|-------|--------|
 | **0** | Foundation & security: scaffold, config, OAuth + Keychain, LLM abstraction, `/health` | ✅ done |
-| 1 | Read & understand: Gmail read/search/thread, chat UI, triage, summarization, Q&A | ⏳ not started |
+| **1** | Read & understand: Gmail read/search/thread, chat UI, triage, summarization, Q&A | ✅ done |
 | 2 | Assist: draft replies & new emails (Gmail **drafts only**) | ⏳ not started |
 | 3 | Stretch: digest, label suggestions, Calendar connector | ⏳ extension points only |
 
@@ -57,14 +57,17 @@ app/
   security/
     auth_google.py        # OAuth flow + Keychain token storage (locked scopes)
     redact.py             # PII/body redaction helpers for logs
-  gmail/                  # (Phase 1) read, search, get_thread, create_draft
+  gmail/
+    client.py             # read, search, get_thread (create_draft in Phase 2)
   llm/
-    base.py               # LLMProvider interface
+    base.py               # LLMProvider interface (+ uses_native_tools flag)
     local_provider.py     # LM Studio (httpx, OpenAI-compatible)
     anthropic_provider.py # Anthropic SDK (opt-in cloud)
     __init__.py           # build_provider() selects provider from config
-  agent/                  # (Phase 1/2) bounded tool-calling loop + tools
-  web/static/             # (Phase 1) chat UI
+  agent/
+    tools.py              # read-only tool schemas + dispatch to Gmail client
+    orchestrator.py       # bounded tool-calling loop + Hermes system prompt
+  web/static/index.html   # minimal chat UI (vanilla JS + Tailwind CDN)
 tests/                    # mocked provider + security tests
 ```
 
@@ -130,7 +133,35 @@ curl http://127.0.0.1:8000/health
 `llm_reachable` is `true` only when the configured LLM backend (LM Studio or
 Anthropic) responds to a no-op ping.
 
-> The chat UI (`http://127.0.0.1:8000`) arrives in Phase 1.
+Then open the chat UI at **http://127.0.0.1:8000**.
+
+### Using Hermes (Phase 1)
+
+1. **Authorize Gmail** — click *Authorize Gmail* in the UI (or `POST /auth/login`).
+   This opens a browser for Google consent once; the token is saved to the
+   Keychain. The server never blocks a chat request on a browser flow — chat
+   replies with a friendly "please authorize" message until a token exists.
+2. **Chat.** Ask things like:
+   - *"Bugün neler önemli?"* / *"What needs my attention today?"* → triage into
+     **Needs reply / Awaiting others / FYI / Newsletters & promotions**.
+   - *"Summarize the thread about the Q3 budget."* → finds and summarizes the thread.
+   - *"Did Alice reply to my proposal yet?"* → searches the inbox and answers.
+
+Hermes replies in the user's language (Turkish when you write Turkish).
+
+### HTTP API
+
+| Endpoint | Method | Purpose |
+|---------|--------|---------|
+| `/health` | GET | status + `llm_reachable` + `gmail_authorized` + `allow_send` |
+| `/auth/status` | GET | whether a Gmail token is stored |
+| `/auth/login` | POST | run the interactive OAuth consent flow (opens a browser) |
+| `/api/chat` | POST | `{"messages":[{"role":"user","content":"..."}]}` → `{"reply","tools_used"}` |
+| `/` , `/static/*` | GET | chat UI |
+
+The agent runs a **bounded** tool-calling loop (max 5 tool iterations). It exposes
+three **read-only** tools — `list_recent_emails`, `search_emails`, `get_thread` —
+and tolerates malformed tool output. There is no send tool.
 
 ---
 

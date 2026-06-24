@@ -26,6 +26,7 @@ _MAX_TOKENS = 4096
 
 class AnthropicProvider(LLMProvider):
     name = "anthropic"
+    uses_native_tools = True
 
     def __init__(self, api_key: str, model: str) -> None:
         if not api_key:

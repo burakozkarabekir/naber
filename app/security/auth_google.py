@@ -48,9 +48,23 @@ class GoogleAuthError(RuntimeError):
     """Raised when authorization cannot be completed."""
 
 
+def _read_keyring() -> str | None:
+    """Read the stored token JSON from the keyring.
+
+    Returns None if absent, or if no keyring backend is available (e.g. running
+    off-macOS without a Keychain). We log the backend issue as metadata only and
+    degrade to "no token" rather than crashing callers like the health check.
+    """
+    try:
+        return keyring.get_password(_KEYRING_SERVICE, _KEYRING_USERNAME)
+    except keyring.errors.KeyringError as exc:
+        logger.warning("Keyring unavailable (%s); treating as no token.", type(exc).__name__)
+        return None
+
+
 def _load_token_from_keychain() -> Credentials | None:
     """Read stored credentials from the OS keyring, if present."""
-    raw = keyring.get_password(_KEYRING_SERVICE, _KEYRING_USERNAME)
+    raw = _read_keyring()
     if not raw:
         return None
     try:
@@ -81,7 +95,7 @@ def clear_token() -> None:
 
 def has_token() -> bool:
     """Return True if a token exists in the keyring (no validity guarantee)."""
-    return keyring.get_password(_KEYRING_SERVICE, _KEYRING_USERNAME) is not None
+    return _read_keyring() is not None
 
 
 def get_credentials(settings: Settings, *, allow_interactive: bool = True) -> Credentials:

@@ -30,6 +30,7 @@ _JSON_OBJ_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 class LocalLLMProvider(LLMProvider):
     name = "local"
+    uses_native_tools = False
 
     def __init__(self, base_url: str, model: str, timeout: float = 120.0) -> None:
         self._base_url = base_url.rstrip("/")

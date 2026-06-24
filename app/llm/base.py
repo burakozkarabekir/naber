@@ -41,6 +41,11 @@ class LLMProvider(ABC):
 
     name: str = "base"
 
+    # Whether the backend supports native function/tool calling. When False
+    # (local 7-8B models), the orchestrator drives tools via a strict-JSON
+    # instruction injected into the prompt instead of the `tools` parameter.
+    uses_native_tools: bool = False
+
     @abstractmethod
     def chat(
         self,

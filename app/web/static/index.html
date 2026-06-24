@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hermes — Email Assistant</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 text-slate-800">
+  <div class="max-w-3xl mx-auto h-screen flex flex-col p-4">
+    <!-- Header -->
+    <header class="flex items-center justify-between pb-3 border-b border-slate-300">
+      <div>
+        <h1 class="text-xl font-semibold text-slate-900">Hermes</h1>
+        <p class="text-xs text-slate-500">Secure email assistant — drafts only, never sends.</p>
+      </div>
+      <div class="flex items-center gap-2 text-sm">
+        <span id="status-dot" class="inline-block w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+        <span id="status-text" class="text-slate-500">checking…</span>
+        <button id="auth-btn"
+          class="hidden ml-2 px-3 py-1 rounded bg-indigo-600 text-white text-xs hover:bg-indigo-700">
+          Authorize Gmail
+        </button>
+      </div>
+    </header>
+
+    <!-- Messages -->
+    <main id="messages" class="flex-1 overflow-y-auto py-4 space-y-3"></main>
+
+    <!-- Composer -->
+    <form id="composer" class="flex gap-2 pt-3 border-t border-slate-300">
+      <input id="input" type="text" autocomplete="off"
+        placeholder="Sorun: 'Bugün neler önemli?' / Ask: 'Summarize the thread about the budget'"
+        class="flex-1 rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      <button type="submit" id="send-btn"
+        class="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50">
+        Send
+      </button>
+    </form>
+  </div>
+
+  <script>
+    // Conversation history kept client-side; the server is stateless.
+    const history = [];
+    const messagesEl = document.getElementById("messages");
+    const inputEl = document.getElementById("input");
+    const sendBtn = document.getElementById("send-btn");
+    const statusDot = document.getElementById("status-dot");
+    const statusText = document.getElementById("status-text");
+    const authBtn = document.getElementById("auth-btn");
+
+    function bubble(role, text) {
+      const wrap = document.createElement("div");
+      wrap.className = role === "user" ? "flex justify-end" : "flex justify-start";
+      const b = document.createElement("div");
+      b.className = (role === "user"
+        ? "bg-indigo-600 text-white"
+        : "bg-white text-slate-800 border border-slate-200") +
+        " rounded-2xl px-4 py-2 max-w-[80%] whitespace-pre-wrap shadow-sm";
+      b.textContent = text;
+      wrap.appendChild(b);
+      messagesEl.appendChild(wrap);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      return b;
+    }
+
+    async function refreshStatus() {
+      try {
+        const r = await fetch("/health");
+        const h = await r.json();
+        const ready = h.gmail_authorized && h.llm_reachable;
+        statusDot.className = "inline-block w-2.5 h-2.5 rounded-full " +
+          (ready ? "bg-green-500" : "bg-amber-400");
+        statusText.textContent =
+          `LLM: ${h.llm_provider}${h.llm_reachable ? " ✓" : " ✗"} · ` +
+          `Gmail: ${h.gmail_authorized ? "authorized" : "not authorized"}`;
+        authBtn.classList.toggle("hidden", !!h.gmail_authorized);
+      } catch {
+        statusText.textContent = "server unreachable";
+      }
+    }
+
+    authBtn.addEventListener("click", async () => {
+      authBtn.disabled = true;
+      authBtn.textContent = "Opening browser…";
+      try {
+        await fetch("/auth/login", { method: "POST" });
+      } catch {}
+      authBtn.disabled = false;
+      authBtn.textContent = "Authorize Gmail";
+      refreshStatus();
+    });
+
+    document.getElementById("composer").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const text = inputEl.value.trim();
+      if (!text) return;
+      inputEl.value = "";
+      bubble("user", text);
+      history.push({ role: "user", content: text });
+
+      sendBtn.disabled = true;
+      const thinking = bubble("assistant", "…");
+      try {
+        const r = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: history }),
+        });
+        const data = await r.json();
+        const reply = data.reply || data.error || "(no response)";
+        thinking.textContent = reply;
+        if (data.reply) history.push({ role: "assistant", content: data.reply });
+      } catch (err) {
+        thinking.textContent = "Request failed: " + err;
+      } finally {
+        sendBtn.disabled = false;
+        inputEl.focus();
+      }
+    });
+
+    refreshStatus();
+    setInterval(refreshStatus, 15000);
+  </script>
+</body>
+</html>
