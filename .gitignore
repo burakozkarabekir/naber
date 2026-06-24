@@ -1,0 +1,33 @@
+# ---- Hermes secrets: NEVER commit these ----
+# OAuth client secret downloaded from Google Cloud
+credentials.json
+# Any OAuth token files (we store tokens in the macOS Keychain, but guard anyway)
+token.json
+*.token
+# Environment / config with secrets
+.env
+.env.local
+
+# ---- Python ----
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+
+# ---- Local data / caches (we avoid persisting email, but guard anyway) ----
+*.sqlite
+*.sqlite3
+*.db
+hermes_cache.*
+
+# ---- OS / editor ----
+.DS_Store
+.idea/
+.vscode/
