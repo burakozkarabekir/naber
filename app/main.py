@@ -82,6 +82,26 @@ def _emit_cloud_warning(settings: Settings) -> None:
         logger.warning("Cloud LLM provider active: email content leaves the machine.")
 
 
+def _emit_allow_send_notice(settings: Settings) -> None:
+    """Make the no-send guarantee explicit even if ALLOW_SEND is flipped on.
+
+    Hermes has NO send code path. ``ALLOW_SEND`` exists only to make this
+    auditable: it does not enable sending because there is nothing to enable.
+    If it is set true, we say so loudly so an operator is never misled into
+    thinking the app can send mail.
+    """
+    if settings.allow_send:
+        banner = (
+            "\n" + "*" * 72 + "\n"
+            "  HERMES: ALLOW_SEND=true has NO EFFECT.\n"
+            "  This MVP has no send capability — only Gmail DRAFTS are created.\n"
+            "  Set ALLOW_SEND=false to reflect reality.\n"
+            + "*" * 72 + "\n"
+        )
+        print(banner)
+        logger.warning("ALLOW_SEND=true ignored: Hermes only creates drafts, never sends.")
+
+
 def _get_gmail(app: FastAPI) -> GmailClient:
     """Return a cached Gmail client, building it on first use.
 
@@ -98,8 +118,9 @@ def create_app() -> FastAPI:
     settings = get_settings()
     _configure_logging(settings.log_level)
     _emit_cloud_warning(settings)
+    _emit_allow_send_notice(settings)
 
-    app = FastAPI(title="Hermes", version="0.1.0-phase1")
+    app = FastAPI(title="Hermes", version="0.2.0-phase2")
 
     provider: LLMProvider = build_provider(settings)
     app.state.settings = settings
@@ -112,7 +133,7 @@ def create_app() -> FastAPI:
     def health() -> JSONResponse:
         llm_ok = False
         try:
-            llm_ok = provider.ping()
+            llm_ok = app.state.llm.ping()
         except Exception as exc:  # noqa: BLE001 - report type only
             logger.warning("LLM ping raised: %s", type(exc).__name__)
 
@@ -173,7 +194,7 @@ def create_app() -> FastAPI:
         logger.info("chat %s", safe_meta(turns=len(history)))
 
         try:
-            result = run_agent(provider, gmail, history)
+            result = run_agent(app.state.llm, gmail, history)
         except Exception as exc:  # noqa: BLE001 - surface type only
             logger.error("chat_error %s", safe_meta(error_type=type(exc).__name__))
             return JSONResponse(

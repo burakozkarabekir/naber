@@ -15,8 +15,8 @@ This repository is being built **phase by phase**. The current state is:
 |------|-------|--------|
 | **0** | Foundation & security: scaffold, config, OAuth + Keychain, LLM abstraction, `/health` | ✅ done |
 | **1** | Read & understand: Gmail read/search/thread, chat UI, triage, summarization, Q&A | ✅ done |
-| 2 | Assist: draft replies & new emails (Gmail **drafts only**) | ⏳ not started |
-| 3 | Stretch: digest, label suggestions, Calendar connector | ⏳ extension points only |
+| **2** | Assist: draft replies & new emails with tone/length controls (Gmail **drafts only**) | ✅ done |
+| 3 | Stretch: digest, label suggestions, Calendar connector | ⏳ extension points + TODOs only (by design) |
 
 ---
 
@@ -65,7 +65,7 @@ app/
     anthropic_provider.py # Anthropic SDK (opt-in cloud)
     __init__.py           # build_provider() selects provider from config
   agent/
-    tools.py              # read-only tool schemas + dispatch to Gmail client
+    tools.py              # tool schemas + dispatch (read tools + create_draft)
     orchestrator.py       # bounded tool-calling loop + Hermes system prompt
   web/static/index.html   # minimal chat UI (vanilla JS + Tailwind CDN)
 tests/                    # mocked provider + security tests
@@ -146,8 +146,22 @@ Then open the chat UI at **http://127.0.0.1:8000**.
      **Needs reply / Awaiting others / FYI / Newsletters & promotions**.
    - *"Summarize the thread about the Q3 budget."* → finds and summarizes the thread.
    - *"Did Alice reply to my proposal yet?"* → searches the inbox and answers.
+   - *"Reply to Alice — short and formal — that I'll send the numbers Friday."*
+     → reads the thread, composes the reply, and **creates a Gmail draft**.
+   - *"Draft a new email to bob@x.com asking to reschedule to Tuesday."*
+     → **creates a new draft**.
 
 Hermes replies in the user's language (Turkish when you write Turkish).
+
+### Drafting (Phase 2) — drafts only, never sends
+
+- Hermes only drafts when you ask it to. It composes the body in the requested
+  **tone** (neutral / formal / friendly) and **length** (short / medium),
+  defaulting to concise and neutral.
+- Replies are threaded correctly (In-Reply-To / References headers + threadId).
+- Every draft is created via the Gmail **drafts** API — there is no send path
+  anywhere. After creating a draft, Hermes tells you it was **not** sent, points
+  you to **Gmail → Drafts**, and reminds you to review and send it manually.
 
 ### HTTP API
 
@@ -159,9 +173,11 @@ Hermes replies in the user's language (Turkish when you write Turkish).
 | `/api/chat` | POST | `{"messages":[{"role":"user","content":"..."}]}` → `{"reply","tools_used"}` |
 | `/` , `/static/*` | GET | chat UI |
 
-The agent runs a **bounded** tool-calling loop (max 5 tool iterations). It exposes
-three **read-only** tools — `list_recent_emails`, `search_emails`, `get_thread` —
-and tolerates malformed tool output. There is no send tool.
+The agent runs a **bounded** tool-calling loop (max 5 tool iterations) and
+tolerates malformed tool output. It exposes four tools:
+`list_recent_emails`, `search_emails`, `get_thread` (read-only), and
+`create_draft` (**draft-only** — it calls the Gmail drafts API and never sends).
+There is no send tool, and the Gmail client has no send method.
 
 ---
 
@@ -191,8 +207,22 @@ source .venv/bin/activate
 pytest -q
 ```
 
-Phase 0 covers: both LLM providers (mocked, no network), the redaction helpers,
-the locked OAuth scopes, the loopback redirect, and the `ALLOW_SEND=false` default.
+The suite (no network, all mocked) covers:
+- **LLM providers** — local JSON-tool parsing, Anthropic block parsing, ping.
+- **Gmail client** — list/search/thread parsing, body extraction, and
+  `create_draft` (new email + reply threading); asserts the client has no send
+  method and that the send endpoints are never called.
+- **Tools** — dispatch, argument validation, and the no-send-tool guarantee.
+- **Orchestrator** — direct answers, native + JSON tool paths, the draft flow,
+  graceful tool-error handling, and the iteration bound.
+- **App** — `/health`, `/auth/status`, chat (direct / triage / draft), bad
+  requests, agent-failure handling, and the served UI.
+- **Security** — redaction, locked OAuth scopes, loopback redirect,
+  `ALLOW_SEND=false` default.
+
+```
+pytest        # 43 passing
+```
 
 ---
 
@@ -216,10 +246,43 @@ addresses, and model I/O containing email text are never logged. Use
 **Network.** The server binds `127.0.0.1` only. Outbound calls are limited to (a)
 the Gmail API and (b) the configured LLM provider. No analytics or telemetry.
 
+**The no-send guarantee (drafts only).** There is no send code path anywhere:
+- `app/gmail/client.py` `create_draft` calls `users().drafts().create` only —
+  never `messages().send` / `drafts().send`. A test asserts those endpoints are
+  never called and that the client exposes no `*send*` method.
+- The agent has no send tool (`tests/test_tools.py::test_no_send_tool_exists`).
+- `ALLOW_SEND` defaults to `false`. It exists only to make the guarantee
+  auditable — it enables nothing, because there is nothing to enable. If set
+  `true`, `app/main.py` prints a loud "has no effect" notice at startup.
+
 **Auditing the security-critical code.** These files are commented for review:
 - `app/security/auth_google.py` — locked minimal scopes, Keychain token storage,
   loopback OAuth redirect.
 - `app/security/redact.py` — PII/body redaction for logs.
-- `app/main.py` — localhost bind, cloud-provider warning, metadata-only logging.
-- The no-send guarantee — there is simply no send code path; `create_draft`
-  (Phase 2) creates a Gmail draft only.
+- `app/gmail/client.py` — drafts-only, metadata-only logging.
+- `app/main.py` — localhost bind, cloud-provider warning, ALLOW_SEND notice,
+  metadata-only logging.
+
+---
+
+## Roadmap & extending Hermes (Phase 3 — not built yet, by design)
+
+Phase 3 items (daily digest, label suggestions, a Calendar connector) are
+intentionally **not** implemented. The architecture leaves clean extension
+points so they slot in without refactors:
+
+- **New email tool** (e.g. `suggest_labels`, `daily_digest`): (1) append a schema
+  to `TOOL_SCHEMAS`, (2) add a `_tool_*` handler, (3) register it in `_DISPATCH`
+  in `app/agent/tools.py`. The orchestrator and providers need no changes — both
+  the native and JSON tool paths pick it up automatically. TODO markers are in
+  `app/agent/tools.py`.
+- **New connector** (e.g. Calendar): add a client alongside `app/gmail/client.py`
+  (same shape — a thin wrapper over a Google API resource, built from Keychain
+  credentials) and expose its operations as tools. Adding a Calendar scope would
+  be the one security-relevant change and must be done deliberately (it would
+  widen the locked scope list in `app/security/auth_google.py`).
+- **Org-wide rollout**: documented in [Google Cloud setup](#2-google-cloud-setup)
+  — a service account with domain-wide delegation — intentionally not implemented.
+
+Any Phase 3 work must preserve every guarantee above: drafts-only, minimal
+scopes, no content logging, localhost-only, local-LLM-by-default.

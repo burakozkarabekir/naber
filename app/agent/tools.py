@@ -83,6 +83,41 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "required": ["thread_id"],
         },
     },
+    {
+        "name": "create_draft",
+        "description": (
+            "Create a Gmail DRAFT — this NEVER sends. Use only when the user asks "
+            "you to draft/write a reply or a new email. Compose the 'body' "
+            "yourself in the tone and length the user requested (short / neutral "
+            "/ formal; default neutral and concise). For a reply, first read the "
+            "thread, then pass the original message id as in_reply_to_message_id "
+            "and set subject to 'Re: ...'. After it succeeds, tell the user the "
+            "draft was created, where to find it, and that they must review and "
+            "send it manually."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "to": {
+                    "type": "string",
+                    "description": "Recipient email address(es), comma-separated.",
+                },
+                "subject": {"type": "string", "description": "Subject line."},
+                "body": {
+                    "type": "string",
+                    "description": "The composed message body (plain text).",
+                },
+                "in_reply_to_message_id": {
+                    "type": "string",
+                    "description": (
+                        "Optional. The Gmail message id this is a reply to, so the "
+                        "draft threads correctly."
+                    ),
+                },
+            },
+            "required": ["to", "subject", "body"],
+        },
+    },
 ]
 
 # Tool names the agent is allowed to call in this phase.
@@ -117,11 +152,45 @@ def _tool_get_thread(client: GmailClient, args: dict[str, Any]) -> Any:
     return client.get_thread(thread_id).to_dict()
 
 
+def _tool_create_draft(client: GmailClient, args: dict[str, Any]) -> Any:
+    """Create a Gmail draft (never sends). Validates required fields."""
+    to = args.get("to")
+    subject = args.get("subject")
+    body = args.get("body")
+    if not to or not isinstance(to, str):
+        raise ToolError("create_draft requires a 'to' address.")
+    if not isinstance(subject, str) or not subject.strip():
+        raise ToolError("create_draft requires a non-empty 'subject'.")
+    if not isinstance(body, str) or not body.strip():
+        raise ToolError("create_draft requires a non-empty 'body'.")
+    in_reply_to = args.get("in_reply_to_message_id")
+    if in_reply_to is not None and not isinstance(in_reply_to, str):
+        raise ToolError("'in_reply_to_message_id' must be a string if provided.")
+
+    result = client.create_draft(
+        to=to,
+        subject=subject,
+        body=body,
+        in_reply_to_message_id=in_reply_to or None,
+    )
+    # The result carries the draft location and the review-&-send reminder so the
+    # agent always relays them to the user.
+    return result.to_dict()
+
+
 # Dispatch table mapping tool name -> handler(client, args) -> JSON-able result.
+#
+# Phase 3 (TODO — do NOT build yet; clean extension points only):
+#   * "suggest_labels"   -> Gmail label suggestions (read labels + classify).
+#   * "daily_digest"     -> compose a digest (reuses list/search/get_thread).
+#   * calendar tools     -> a new connector (see app/connectors note below).
+# Adding a tool = (1) append a schema to TOOL_SCHEMAS, (2) add a _tool_* handler,
+# (3) register it here. No orchestrator changes needed.
 _DISPATCH: dict[str, Callable[[GmailClient, dict[str, Any]], Any]] = {
     "list_recent_emails": _tool_list_recent_emails,
     "search_emails": _tool_search_emails,
     "get_thread": _tool_get_thread,
+    "create_draft": _tool_create_draft,
 }
 
 

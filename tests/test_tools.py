@@ -8,7 +8,7 @@ import pytest
 
 from app.agent import orchestrator, tools
 from app.agent.tools import ToolError, execute_tool
-from app.gmail.client import EmailSummary, ThreadMessage, ThreadView
+from app.gmail.client import DraftResult, EmailSummary, ThreadMessage, ThreadView
 from app.llm.base import LLMResponse, ToolCall
 
 
@@ -25,6 +25,9 @@ def _gmail_stub():
     ]
     g.get_thread.return_value = ThreadView(
         "t1", [ThreadMessage("m1", "a@x.com", "me", "date", "Hi", "body text")]
+    )
+    g.create_draft.return_value = DraftResult(
+        draft_id="d1", thread_id="t1", is_reply=False
     )
     return g
 
@@ -55,14 +58,66 @@ def test_execute_unknown_tool_raises():
 
 
 def test_no_send_tool_exists():
-    # Hard guarantee: no tool can send mail in this MVP.
+    # Hard guarantee: no tool can send mail in this MVP. create_draft is the
+    # only write tool and it only ever creates a draft.
     assert "send_email" not in tools.ALLOWED_TOOLS
     assert "send" not in tools.ALLOWED_TOOLS
     assert tools.ALLOWED_TOOLS == {
         "list_recent_emails",
         "search_emails",
         "get_thread",
+        "create_draft",
     }
+    # No tool name hints at sending.
+    assert not any("send" in name for name in tools.ALLOWED_TOOLS)
+
+
+def test_execute_create_draft_new_email():
+    g = _gmail_stub()
+    out = execute_tool(
+        "create_draft",
+        {"to": "a@x.com", "subject": "Hello", "body": "Hi there"},
+        g,
+    )
+    assert out["draft_id"] == "d1"
+    assert out["is_reply"] is False
+    assert "review" in out["reminder"].lower()
+    g.create_draft.assert_called_once_with(
+        to="a@x.com", subject="Hello", body="Hi there", in_reply_to_message_id=None
+    )
+
+
+def test_execute_create_draft_reply_passes_message_id():
+    g = _gmail_stub()
+    execute_tool(
+        "create_draft",
+        {
+            "to": "a@x.com",
+            "subject": "Re: Hi",
+            "body": "Thanks!",
+            "in_reply_to_message_id": "m1",
+        },
+        g,
+    )
+    g.create_draft.assert_called_once_with(
+        to="a@x.com", subject="Re: Hi", body="Thanks!", in_reply_to_message_id="m1"
+    )
+
+
+def test_execute_create_draft_validates_required_fields():
+    g = _gmail_stub()
+    with pytest.raises(ToolError):
+        execute_tool("create_draft", {"subject": "s", "body": "b"}, g)  # no 'to'
+    with pytest.raises(ToolError):
+        execute_tool("create_draft", {"to": "a@x.com", "body": "b"}, g)  # no subject
+    with pytest.raises(ToolError):
+        execute_tool("create_draft", {"to": "a@x.com", "subject": "s"}, g)  # no body
+    with pytest.raises(ToolError):
+        execute_tool(
+            "create_draft",
+            {"to": "a@x.com", "subject": " ", "body": "b"},  # blank subject
+            g,
+        )
 
 
 # --- Orchestrator loop (native tool path) ---------------------------------
@@ -137,6 +192,42 @@ def test_agent_tool_error_is_handled_gracefully():
     assert result.reply == "I couldn't open that thread."
     # The failed tool is not recorded as used.
     assert result.tools_used == []
+
+
+def test_agent_create_draft_flow_native():
+    # User asks for a reply; model reads thread then drafts.
+    provider = _FakeProvider(
+        [
+            LLMResponse(tool_calls=[ToolCall("get_thread", {"thread_id": "t1"}, "tu1")]),
+            LLMResponse(
+                tool_calls=[
+                    ToolCall(
+                        "create_draft",
+                        {
+                            "to": "a@x.com",
+                            "subject": "Re: Hi",
+                            "body": "Kısa ve resmi yanıt.",
+                            "in_reply_to_message_id": "m1",
+                        },
+                        "tu2",
+                    )
+                ]
+            ),
+            LLMResponse(
+                text="Taslak oluşturuldu. Gmail → Taslaklar'dan inceleyip gönderin."
+            ),
+        ]
+    )
+    g = _gmail_stub()
+    g.create_draft.return_value = DraftResult(
+        draft_id="d9", thread_id="t1", is_reply=True
+    )
+    result = orchestrator.run_agent(
+        provider, g, [{"role": "user", "content": "buna kısa resmi bir yanıt yaz"}]
+    )
+    assert result.tools_used == ["get_thread", "create_draft"]
+    assert "Taslak" in result.reply
+    g.create_draft.assert_called_once()
 
 
 def test_agent_bounded_by_max_iterations():

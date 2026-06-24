@@ -57,6 +57,55 @@ def test_local_provider_extracts_tool_call_from_json():
     assert call.arguments == {"max_results": 5}
 
 
+def test_local_provider_extracts_tool_call_from_code_fence():
+    provider = LocalLLMProvider(base_url="http://localhost:1234/v1", model="m")
+    content = (
+        "I'll search.\n```json\n"
+        '{"tool": "search_emails", "arguments": {"query": "is:unread"}}\n'
+        "```"
+    )
+    fake_resp = MagicMock()
+    fake_resp.json.return_value = _chat_completion(content)
+    fake_resp.raise_for_status.return_value = None
+    fake_client = MagicMock()
+    fake_client.post.return_value = fake_resp
+
+    with patch("app.llm.local_provider.httpx.Client") as client_cls:
+        client_cls.return_value.__enter__.return_value = fake_client
+        result = provider.chat([{"role": "user", "content": "x"}], tools=[{"name": "t"}])
+
+    assert result.wants_tool
+    assert result.tool_calls[0].name == "search_emails"
+    assert result.tool_calls[0].arguments == {"query": "is:unread"}
+
+
+def test_local_provider_handles_braces_in_prose_and_strings():
+    # Greedy {.*} would span the whole thing and fail. Balanced scan must find
+    # the real tool object even with other braces and JSON-string braces around.
+    provider = LocalLLMProvider(base_url="http://localhost:1234/v1", model="m")
+    content = (
+        "Use {curly} carefully. "
+        '{"tool": "create_draft", "arguments": {"to": "a@x.com", '
+        '"subject": "Re: {ticket}", "body": "see {here}"}} '
+        "Done {ok}."
+    )
+    fake_resp = MagicMock()
+    fake_resp.json.return_value = _chat_completion(content)
+    fake_resp.raise_for_status.return_value = None
+    fake_client = MagicMock()
+    fake_client.post.return_value = fake_resp
+
+    with patch("app.llm.local_provider.httpx.Client") as client_cls:
+        client_cls.return_value.__enter__.return_value = fake_client
+        result = provider.chat([{"role": "user", "content": "x"}], tools=[{"name": "t"}])
+
+    assert result.wants_tool
+    call = result.tool_calls[0]
+    assert call.name == "create_draft"
+    assert call.arguments["subject"] == "Re: {ticket}"
+    assert call.arguments["body"] == "see {here}"
+
+
 def test_local_provider_malformed_tool_json_is_treated_as_text():
     provider = LocalLLMProvider(base_url="http://localhost:1234/v1", model="m")
 

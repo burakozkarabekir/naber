@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from typing import Any
 
 import httpx
@@ -22,10 +21,6 @@ import httpx
 from app.llm.base import LLMProvider, LLMResponse, ToolCall
 
 logger = logging.getLogger("hermes.llm.local")
-
-# Matches the first balanced-looking JSON object in a string. Local models often
-# wrap JSON in prose or markdown fences, so we search rather than json.loads().
-_JSON_OBJ_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 
 class LocalLLMProvider(LLMProvider):
@@ -76,25 +71,36 @@ class LocalLLMProvider(LLMProvider):
         Expected (instructed) shape:
             {"tool": "list_recent_emails", "arguments": {"max_results": 10}}
 
+        Local models often wrap that JSON in prose or markdown fences. We:
+          1. try parsing the whole (stripped) content as JSON;
+          2. otherwise scan for *balanced* ``{...}`` objects and try each one,
+             returning the first that looks like a tool call.
+
+        A naive greedy ``{.*}`` regex would span from the first ``{`` to the
+        last ``}`` and fail to parse whenever the model emits any other braces —
+        silently dropping a valid tool call. The balanced scan avoids that.
+
         Returns None if no well-formed tool object is found (the orchestrator
         then treats the output as a final text answer).
         """
-        match = _JSON_OBJ_RE.search(content)
-        if not match:
-            return None
-        try:
-            obj = json.loads(match.group(0))
-        except json.JSONDecodeError:
-            return None
-        if not isinstance(obj, dict):
-            return None
-        tool_name = obj.get("tool") or obj.get("name")
-        if not tool_name or not isinstance(tool_name, str):
-            return None
-        args = obj.get("arguments") or obj.get("args") or {}
-        if not isinstance(args, dict):
-            args = {}
-        return ToolCall(name=tool_name, arguments=args)
+        stripped = content.strip()
+        # Strip a leading/trailing markdown code fence if present.
+        if stripped.startswith("```"):
+            stripped = stripped.strip("`")
+            # Drop an optional language tag on the first line (e.g. ```json).
+            stripped = stripped.split("\n", 1)[-1] if "\n" in stripped else stripped
+
+        candidates: list[str] = []
+        whole = stripped.strip()
+        if whole.startswith("{"):
+            candidates.append(whole)
+        candidates.extend(_balanced_json_objects(content))
+
+        for candidate in candidates:
+            tool_call = _as_tool_call(candidate)
+            if tool_call is not None:
+                return tool_call
+        return None
 
     def ping(self) -> bool:
         """Check LM Studio reachability via the models endpoint (no content)."""
@@ -105,3 +111,55 @@ class LocalLLMProvider(LLMProvider):
         except httpx.HTTPError as exc:
             logger.warning("Local LLM ping failed: %s", type(exc).__name__)
             return False
+
+
+def _balanced_json_objects(text: str) -> list[str]:
+    """Yield top-level balanced ``{...}`` substrings, ignoring braces in strings.
+
+    Tracks string state and escapes so braces inside JSON string values don't
+    throw off the depth count. Returns candidates in order of appearance.
+    """
+    objects: list[str] = []
+    depth = 0
+    start = -1
+    in_string = False
+    escaped = False
+    for i, ch in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start != -1:
+                    objects.append(text[start : i + 1])
+                    start = -1
+    return objects
+
+
+def _as_tool_call(candidate: str) -> ToolCall | None:
+    """Parse a JSON string into a ToolCall if it names a tool, else None."""
+    try:
+        obj = json.loads(candidate)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(obj, dict):
+        return None
+    tool_name = obj.get("tool") or obj.get("name")
+    if not tool_name or not isinstance(tool_name, str):
+        return None
+    args = obj.get("arguments") or obj.get("args") or {}
+    if not isinstance(args, dict):
+        args = {}
+    return ToolCall(name=tool_name, arguments=args)

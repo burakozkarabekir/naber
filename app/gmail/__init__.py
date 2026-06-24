@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from app.gmail.client import (
+    DRAFTS_URL,
+    DraftResult,
     EmailSummary,
     GmailClient,
     ThreadMessage,
@@ -10,6 +12,8 @@ from app.gmail.client import (
 )
 
 __all__ = [
+    "DRAFTS_URL",
+    "DraftResult",
     "EmailSummary",
     "GmailClient",
     "ThreadMessage",
