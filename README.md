@@ -52,13 +52,13 @@ static `index.html` (vanilla JS + Tailwind CDN, no build step) — added in Phas
 
 ```
 app/
-  main.py                 # FastAPI app, /health, localhost bind, cloud warning
+  main.py                 # FastAPI app, /health, /auth/*, /api/chat, localhost bind
   config.py               # pydantic-settings config from .env
   security/
     auth_google.py        # OAuth flow + Keychain token storage (locked scopes)
     redact.py             # PII/body redaction helpers for logs
   gmail/
-    client.py             # read, search, get_thread (create_draft in Phase 2)
+    client.py             # read, search, get_thread, create_draft (drafts only)
   llm/
     base.py               # LLMProvider interface (+ uses_native_tools flag)
     local_provider.py     # LM Studio (httpx, OpenAI-compatible)
@@ -221,7 +221,7 @@ The suite (no network, all mocked) covers:
   `ALLOW_SEND=false` default.
 
 ```
-pytest        # 43 passing
+pytest        # 52 passing
 ```
 
 ---
