@@ -6,223 +6,369 @@
   <title>Hermes — E-posta Asistanı</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
     :root { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
-    body { background:
-      radial-gradient(1200px 600px at 100% -10%, #eef2ff 0%, transparent 55%),
-      radial-gradient(1000px 500px at -10% 110%, #f5f3ff 0%, transparent 50%),
-      #f8fafc; }
-    .msgs::-webkit-scrollbar { width: 8px; }
-    .msgs::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 9999px; }
+    .msgs::-webkit-scrollbar, .memlist::-webkit-scrollbar { width: 8px; }
+    .msgs::-webkit-scrollbar-thumb, .memlist::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 9999px; }
     .fade-in { animation: fade .28s ease both; }
     @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
     .dot { width: 6px; height: 6px; border-radius: 9999px; background: #94a3b8; display: inline-block; animation: bounce 1.2s infinite; }
     .dot:nth-child(2) { animation-delay: .15s; } .dot:nth-child(3) { animation-delay: .3s; }
     @keyframes bounce { 0%,60%,100% { transform: translateY(0); opacity:.5 } 30% { transform: translateY(-5px); opacity:1 } }
     .prose-mini strong { font-weight: 600; color: #0f172a; }
-    .prose-mini code { font-family: ui-monospace, monospace; }
   </style>
 </head>
-<body class="min-h-screen text-slate-800">
-  <div class="max-w-2xl mx-auto h-screen flex flex-col px-3 sm:px-4">
+<body class="h-screen overflow-hidden bg-slate-100 text-slate-800">
+<div class="flex h-full">
 
-    <!-- Header -->
-    <header class="flex items-center gap-3 pt-5 pb-3">
-      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 grid place-items-center text-white text-lg shadow-lg shadow-indigo-500/20">✉️</div>
-      <div class="flex-1">
-        <div class="flex items-center gap-2">
-          <h1 class="text-lg font-semibold text-slate-900 leading-none">Hermes</h1>
-          <span id="demo-badge" class="hidden text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 border border-amber-200">Demo</span>
-        </div>
-        <p class="text-xs text-slate-400 mt-0.5">E-posta asistanı · taslak hazırlar, asla göndermez</p>
+  <!-- ============ Sidebar ============ -->
+  <aside class="w-16 lg:w-64 shrink-0 bg-slate-950 text-slate-300 flex flex-col">
+    <!-- Brand -->
+    <div class="flex items-center gap-3 px-3 lg:px-5 h-16 border-b border-white/5">
+      <div class="w-9 h-9 shrink-0 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 grid place-items-center text-white shadow-lg shadow-indigo-500/30">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 7l9 6 9-6M4 5h16a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
-      <div class="flex items-center gap-2">
-        <span id="status-pill" class="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 bg-white/70 border border-slate-200 rounded-full px-2.5 py-1">
-          <span id="status-dot" class="w-2 h-2 rounded-full bg-slate-300"></span>
-          <span id="status-text">bağlanıyor…</span>
-        </span>
+      <div class="hidden lg:block leading-tight">
+        <div class="font-bold text-white tracking-tight">Hermes</div>
+        <div class="text-[10px] text-slate-500">E-posta Asistanı</div>
+      </div>
+      <span id="demo-badge" class="hidden lg:inline-flex ml-auto text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-300 border border-amber-400/20">Demo</span>
+    </div>
+
+    <!-- Nav -->
+    <nav class="flex-1 px-2 lg:px-3 py-4 space-y-1">
+      <button data-nav="chat" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition">
+        <svg class="shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 12a8 8 0 01-8 8H4l2.3-2.9A8 8 0 1121 12z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="hidden lg:inline">Sohbet</span>
+      </button>
+      <button data-nav="memory" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition">
+        <svg class="shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 4a5 5 0 00-5 5c0 .8-.6 1.6-1.2 2.2-.5.5-.8 1.2-.8 2C5 15.4 6.6 17 8.5 17H9v2a1 1 0 001 1h4a1 1 0 001-1v-2h.5c1.9 0 3.5-1.6 3.5-3.8 0-.8-.3-1.5-.8-2C17.6 10.6 17 9.8 17 9a5 5 0 00-5-5z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="hidden lg:inline">Hafıza</span>
+        <span id="mem-count" class="hidden lg:inline ml-auto text-[10px] bg-white/10 rounded-full px-1.5 py-0.5"></span>
+      </button>
+    </nav>
+
+    <!-- Footer -->
+    <div class="px-3 lg:px-4 py-4 border-t border-white/5 space-y-3">
+      <div class="hidden lg:flex items-start gap-2 text-[11px] text-slate-500 leading-snug">
+        <svg class="shrink-0 mt-0.5 text-emerald-400" width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+        <span>Yalnızca <b class="text-slate-400">taslak</b> oluşturur, hiçbir e-postayı otomatik göndermez.</span>
+      </div>
+      <div class="flex items-center gap-2 text-[11px] text-slate-500">
+        <span id="status-dot" class="w-2 h-2 shrink-0 rounded-full bg-slate-600"></span>
+        <span id="status-text" class="hidden lg:inline truncate">bağlanıyor…</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ Main ============ -->
+  <main class="flex-1 flex flex-col min-w-0 bg-slate-50">
+
+    <!-- Topbar -->
+    <header class="h-16 shrink-0 flex items-center gap-3 px-4 sm:px-6 bg-white border-b border-slate-200">
+      <div>
+        <h1 id="view-title" class="text-[15px] font-semibold text-slate-900 leading-none">Sohbet</h1>
+        <p id="view-sub" class="text-xs text-slate-400 mt-1">Triyaj, özet, soru-cevap ve taslaklar</p>
+      </div>
+      <div class="ml-auto flex items-center gap-2">
+        <span id="demo-strip" class="hidden text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1">🧪 Demo — örnek veriler</span>
         <button id="auth-btn" class="hidden px-3 py-1.5 rounded-full bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 shadow-sm">Gmail'i bağla</button>
       </div>
     </header>
 
-    <!-- Demo strip -->
-    <div id="demo-strip" class="hidden mb-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-      🧪 <b>Demo modu</b> — örnek verilerle çalışıyor, gerçek Gmail'e bağlı değil. Aşağıdaki önerilere tıklayarak deneyebilirsin.
-    </div>
+    <!-- ===== Chat view ===== -->
+    <section id="view-chat" class="flex-1 flex flex-col min-h-0">
+      <div class="flex-1 min-h-0 flex flex-col max-w-3xl w-full mx-auto px-4">
 
-    <!-- Messages -->
-    <main id="messages" class="msgs flex-1 overflow-y-auto py-2 space-y-4"></main>
+        <div id="messages" class="msgs flex-1 overflow-y-auto py-5 space-y-4"></div>
 
-    <!-- Empty state -->
-    <section id="empty" class="flex-1 flex flex-col items-center justify-center text-center px-4">
-      <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 grid place-items-center text-white text-2xl shadow-xl shadow-indigo-500/25 mb-4">✉️</div>
-      <h2 class="text-xl font-semibold text-slate-900">Merhaba 👋</h2>
-      <p class="text-sm text-slate-500 mt-1 max-w-sm">Gelen kutunu triyaj edeyim, yazışmaları özetleyeyim ya da senin için bir yanıt <b>taslağı</b> hazırlayayım.</p>
-      <div id="suggest" class="grid sm:grid-cols-2 gap-2 mt-6 w-full max-w-lg"></div>
+        <div id="empty" class="flex-1 flex flex-col items-center justify-center text-center px-4">
+          <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 grid place-items-center text-white shadow-xl shadow-indigo-500/25 mb-4">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M3 7l9 6 9-6M4 5h16a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <h2 class="text-xl font-semibold text-slate-900">Merhaba 👋</h2>
+          <p class="text-sm text-slate-500 mt-1 max-w-sm">Gelen kutunu triyaj edeyim, yazışmaları özetleyeyim ya da senin için bir yanıt <b>taslağı</b> hazırlayayım.</p>
+          <div id="suggest" class="grid sm:grid-cols-2 gap-2 mt-6 w-full max-w-lg"></div>
+        </div>
+
+        <form id="composer" class="py-4">
+          <div class="flex items-end gap-2 bg-white border border-slate-200 rounded-2xl p-1.5 shadow-sm focus-within:ring-2 focus-within:ring-indigo-400 focus-within:border-indigo-300 transition">
+            <textarea id="input" rows="1" placeholder="Bir şey sor… (ör. Bugün neler önemli?)"
+              class="flex-1 resize-none bg-transparent px-3 py-2 max-h-32 focus:outline-none text-sm placeholder:text-slate-400"></textarea>
+            <button type="submit" id="send-btn" title="Gönder"
+              class="w-9 h-9 shrink-0 rounded-xl bg-indigo-600 text-white grid place-items-center hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 12l16-8-5 16-3.5-6.5L4 12z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </form>
+      </div>
     </section>
 
-    <!-- Composer -->
-    <form id="composer" class="py-3">
-      <div id="chips" class="flex flex-wrap gap-1.5 mb-2"></div>
-      <div class="flex items-end gap-2 bg-white border border-slate-200 rounded-2xl p-1.5 shadow-sm focus-within:ring-2 focus-within:ring-indigo-400 focus-within:border-indigo-300 transition">
-        <textarea id="input" rows="1" placeholder="Bir şey sor… (ör. Bugün neler önemli?)"
-          class="flex-1 resize-none bg-transparent px-3 py-2 max-h-32 focus:outline-none text-sm placeholder:text-slate-400"></textarea>
-        <button type="submit" id="send-btn" title="Gönder"
-          class="w-9 h-9 shrink-0 rounded-xl bg-indigo-600 text-white grid place-items-center hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 12l16-8-5 16-3.5-6.5L4 12z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
-        </button>
+    <!-- ===== Memory view ===== -->
+    <section id="view-memory" class="hidden flex-1 min-h-0 overflow-y-auto memlist">
+      <div class="max-w-2xl w-full mx-auto px-4 py-6">
+
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <div class="flex items-start gap-3">
+            <div class="w-10 h-10 shrink-0 rounded-xl bg-violet-100 text-violet-600 grid place-items-center">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 4a5 5 0 00-5 5c0 .8-.6 1.6-1.2 2.2-.5.5-.8 1.2-.8 2C5 15.4 6.6 17 8.5 17H9v2a1 1 0 001 1h4a1 1 0 001-1v-2h.5c1.9 0 3.5-1.6 3.5-3.8 0-.8-.3-1.5-.8-2C17.6 10.6 17 9.8 17 9a5 5 0 00-5-5z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+            </div>
+            <div>
+              <h2 class="font-semibold text-slate-900">Hafıza</h2>
+              <p class="text-sm text-slate-500 mt-0.5 leading-relaxed">
+                Hermes'in <b>her yanıtında ve her taslakta</b> dikkate aldığı kalıcı notların.
+                İmzanı, tercih ettiğin tonu ve sürekli talimatlarını buraya yaz.
+                Sohbette <i>"hafızana ekle: …"</i> diyerek de ekleyebilirsin.
+              </p>
+            </div>
+          </div>
+
+          <!-- Add note -->
+          <form id="mem-form" class="mt-4 flex gap-2">
+            <input id="mem-input" type="text" maxlength="300"
+              placeholder="Yeni not… (ör. İmza: Burak Özkarabekir · Yanıtlar her zaman kısa olsun)"
+              class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-violet-300 placeholder:text-slate-400" />
+            <button type="submit" class="px-4 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 shadow-sm">Ekle</button>
+          </form>
+
+          <!-- Notes -->
+          <ul id="mem-list" class="mt-4 space-y-2"></ul>
+          <p id="mem-empty" class="hidden mt-4 text-sm text-slate-400 text-center py-6">Henüz not yok. İlk notunu ekle 👆</p>
+          <p id="mem-status" class="text-[11px] text-slate-400 mt-3 text-right h-4"></p>
+        </div>
+
+        <div class="mt-4 text-[11px] text-slate-400 leading-relaxed px-1">
+          Notlar bilgisayarında küçük bir yerel dosyada saklanır (<code>hermes_memory.json</code>, git'e girmez).
+          Buraya asla parola/anahtar yazma; e-posta içerikleri de burada saklanmaz.
+        </div>
       </div>
-      <p class="text-[11px] text-slate-400 text-center mt-1.5">Hermes yalnızca <b>taslak</b> oluşturur — hiçbir e-postayı otomatik göndermez.</p>
-    </form>
-  </div>
+    </section>
 
-  <script>
-    const SUGGESTIONS = [
-      { icon: "📥", label: "Bugün neler önemli?", text: "Bugün neler önemli?" },
-      { icon: "🧾", label: "Q3 bütçe yazışmasını özetle", text: "Q3 bütçe yazışmasını özetle" },
-      { icon: "🔍", label: "David teklife döndü mü?", text: "David teklife döndü mü?" },
-      { icon: "✍️", label: "Ayşe'ye kısa, resmi yanıt taslağı", text: "Ayşe'ye kısa ve resmi bir yanıt taslağı yaz: rakamları Cuma göndereceğim." },
-    ];
+  </main>
+</div>
 
-    const history = [];
-    const $ = (id) => document.getElementById(id);
-    const messagesEl = $("messages"), emptyEl = $("empty"), inputEl = $("input"), sendBtn = $("send-btn");
+<script>
+  const SUGGESTIONS = [
+    { icon: "📥", label: "Bugün neler önemli?", text: "Bugün neler önemli?" },
+    { icon: "🧾", label: "Q3 bütçe yazışmasını özetle", text: "Q3 bütçe yazışmasını özetle" },
+    { icon: "🔍", label: "David teklife döndü mü?", text: "David teklife döndü mü?" },
+    { icon: "✍️", label: "Ayşe'ye kısa, resmi yanıt taslağı", text: "Ayşe'ye kısa ve resmi bir yanıt taslağı yaz: rakamları Cuma göndereceğim." },
+  ];
+  const VIEWS = {
+    chat:   { title: "Sohbet", sub: "Triyaj, özet, soru-cevap ve taslaklar" },
+    memory: { title: "Hafıza", sub: "Hermes'in her yanıtında dikkate aldığı kalıcı notlar" },
+  };
 
-    function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-    function fmt(s){
-      let h = esc(s);
-      h = h.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
-      h = h.replace(/(^|[^\*])\*(?!\s)([^*]+?)\*(?!\*)/g,'$1<em>$2</em>');
-      h = h.replace(/`([^`]+?)`/g,'<code class="px-1 rounded bg-slate-100 text-[.85em]">$1</code>');
-      return h;
+  const history = [];
+  const $ = (id) => document.getElementById(id);
+  const messagesEl = $("messages"), emptyEl = $("empty"), inputEl = $("input"), sendBtn = $("send-btn");
+
+  /* ---------- view switching ---------- */
+  function show(view){
+    $("view-chat").classList.toggle("hidden", view !== "chat");
+    $("view-chat").classList.toggle("flex", view === "chat");
+    $("view-memory").classList.toggle("hidden", view !== "memory");
+    $("view-title").textContent = VIEWS[view].title;
+    $("view-sub").textContent = VIEWS[view].sub;
+    document.querySelectorAll(".nav-item").forEach(b => {
+      const active = b.dataset.nav === view;
+      b.className = "nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition " +
+        (active ? "bg-white/10 text-white" : "text-slate-400 hover:text-slate-200 hover:bg-white/5");
+    });
+    if(view === "memory") loadMemory();
+    if(view === "chat") inputEl.focus();
+  }
+  document.querySelectorAll(".nav-item").forEach(b => b.onclick = () => show(b.dataset.nav));
+
+  /* ---------- chat ---------- */
+  function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+  function fmt(s){
+    let h = esc(s);
+    h = h.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+    h = h.replace(/(^|[^\*])\*(?!\s)([^*]+?)\*(?!\*)/g,'$1<em>$2</em>');
+    h = h.replace(/`([^`]+?)`/g,'<code class="px-1 rounded bg-slate-100 text-[.85em]">$1</code>');
+    return h;
+  }
+  function avatar(role){
+    const d = document.createElement("div");
+    if(role === "assistant"){
+      d.className = "w-8 h-8 shrink-0 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 text-white grid place-items-center text-xs font-bold shadow";
+      d.textContent = "H";
+    } else {
+      d.className = "w-8 h-8 shrink-0 rounded-lg bg-slate-200 text-slate-600 grid place-items-center text-[10px] font-semibold";
+      d.textContent = "Sen";
     }
-
-    function avatar(role){
-      const d = document.createElement("div");
-      if(role === "assistant"){
-        d.className = "w-8 h-8 shrink-0 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 text-white grid place-items-center text-sm shadow";
-        d.textContent = "H";
-      } else {
-        d.className = "w-8 h-8 shrink-0 rounded-lg bg-slate-200 text-slate-600 grid place-items-center text-xs font-semibold";
-        d.textContent = "Sen";
-      }
-      return d;
-    }
-
-    function row(role){
-      const wrap = document.createElement("div");
-      wrap.className = "fade-in flex gap-2.5 " + (role === "user" ? "flex-row-reverse" : "");
-      const bubble = document.createElement("div");
-      bubble.className = (role === "user"
-        ? "bg-indigo-600 text-white rounded-2xl rounded-tr-sm"
-        : "bg-white text-slate-800 border border-slate-200 rounded-2xl rounded-tl-sm prose-mini")
-        + " px-3.5 py-2.5 max-w-[85%] text-sm leading-relaxed whitespace-pre-wrap shadow-sm";
-      wrap.appendChild(avatar(role));
-      wrap.appendChild(bubble);
-      messagesEl.appendChild(wrap);
-      emptyEl.style.display = "none";
+    return d;
+  }
+  function row(role){
+    const wrap = document.createElement("div");
+    wrap.className = "fade-in flex gap-2.5 " + (role === "user" ? "flex-row-reverse" : "");
+    const bubble = document.createElement("div");
+    bubble.className = (role === "user"
+      ? "bg-indigo-600 text-white rounded-2xl rounded-tr-sm"
+      : "bg-white text-slate-800 border border-slate-200 rounded-2xl rounded-tl-sm prose-mini")
+      + " px-3.5 py-2.5 max-w-[85%] text-sm leading-relaxed whitespace-pre-wrap shadow-sm";
+    wrap.appendChild(avatar(role));
+    wrap.appendChild(bubble);
+    messagesEl.appendChild(wrap);
+    emptyEl.style.display = "none";
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return bubble;
+  }
+  function typingBubble(){
+    const b = row("assistant");
+    b.innerHTML = '<span class="dot"></span><span class="dot ml-1"></span><span class="dot ml-1"></span>';
+    return b;
+  }
+  function toolChips(bubble, tools){
+    if(!tools || !tools.length) return;
+    const wrap = document.createElement("div");
+    wrap.className = "flex flex-wrap gap-1 mt-2 pt-2 border-t border-slate-100";
+    tools.forEach(t => {
+      const c = document.createElement("span");
+      c.className = "text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded-full px-1.5 py-0.5";
+      c.textContent = "⚙︎ " + t;
+      wrap.appendChild(c);
+    });
+    bubble.appendChild(wrap);
+  }
+  async function send(text){
+    text = (text || "").trim();
+    if(!text) return;
+    show("chat");
+    row("user").textContent = text;
+    history.push({ role: "user", content: text });
+    inputEl.value = ""; autogrow();
+    sendBtn.disabled = true;
+    const typing = typingBubble();
+    try {
+      const r = await fetch("/api/chat", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: history }),
+      });
+      const data = await r.json();
+      const reply = data.reply || data.error || "(yanıt yok)";
+      typing.innerHTML = fmt(reply);
+      toolChips(typing, data.tools_used);
+      if(data.reply) history.push({ role: "assistant", content: data.reply });
+      loadMemoryCount(); // "hafızana ekle" may have changed notes
+    } catch(err){
+      typing.textContent = "İstek başarısız: " + err;
+    } finally {
+      sendBtn.disabled = false; inputEl.focus();
       messagesEl.scrollTop = messagesEl.scrollHeight;
-      return bubble;
     }
-
-    function typingBubble(){
-      const b = row("assistant");
-      b.innerHTML = '<span class="dot"></span><span class="dot ml-1"></span><span class="dot ml-1"></span>';
-      return b;
-    }
-
-    function toolChips(bubble, tools){
-      if(!tools || !tools.length) return;
-      const wrap = document.createElement("div");
-      wrap.className = "flex flex-wrap gap-1 mt-2 pt-2 border-t border-slate-100";
-      tools.forEach(t => {
-        const c = document.createElement("span");
-        c.className = "text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded-full px-1.5 py-0.5";
-        c.textContent = "⚙︎ " + t;
-        wrap.appendChild(c);
-      });
-      bubble.appendChild(wrap);
-    }
-
-    async function send(text){
-      text = (text || "").trim();
-      if(!text) return;
-      row("user").textContent = text;
-      history.push({ role: "user", content: text });
-      inputEl.value = ""; autogrow();
-      sendBtn.disabled = true;
-      const typing = typingBubble();
-      try {
-        const r = await fetch("/api/chat", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: history }),
-        });
-        const data = await r.json();
-        const reply = data.reply || data.error || "(yanıt yok)";
-        typing.innerHTML = fmt(reply);
-        toolChips(typing, data.tools_used);
-        if(data.reply) history.push({ role: "assistant", content: data.reply });
-      } catch(err){
-        typing.textContent = "İstek başarısız: " + err;
-      } finally {
-        sendBtn.disabled = false; inputEl.focus();
-        messagesEl.scrollTop = messagesEl.scrollHeight;
-      }
-    }
-
-    function renderSuggestions(){
-      const grid = $("suggest"), chips = $("chips");
-      SUGGESTIONS.forEach(s => {
-        const card = document.createElement("button");
-        card.type = "button";
-        card.className = "text-left text-sm bg-white border border-slate-200 rounded-xl px-3 py-2.5 hover:border-indigo-300 hover:shadow-sm transition flex items-center gap-2";
-        card.innerHTML = `<span class="text-base">${s.icon}</span><span class="text-slate-700">${esc(s.label)}</span>`;
-        card.onclick = () => send(s.text);
-        grid.appendChild(card);
-
-        const chip = document.createElement("button");
-        chip.type = "button";
-        chip.className = "text-xs text-slate-600 bg-white border border-slate-200 rounded-full px-2.5 py-1 hover:border-indigo-300 transition";
-        chip.textContent = s.icon + " " + s.label;
-        chip.onclick = () => send(s.text);
-        chips.appendChild(chip);
-      });
-    }
-
-    function autogrow(){ inputEl.style.height = "auto"; inputEl.style.height = Math.min(inputEl.scrollHeight, 128) + "px"; }
-
-    async function refreshStatus(){
-      try {
-        const h = await (await fetch("/health")).json();
-        $("status-pill").classList.remove("hidden");
-        const ready = h.gmail_authorized && h.llm_reachable;
-        $("status-dot").className = "w-2 h-2 rounded-full " + (ready ? "bg-green-500" : "bg-amber-400");
-        $("status-text").textContent = h.demo
-          ? "demo · hazır"
-          : `LLM ${h.llm_reachable ? "✓" : "✗"} · Gmail ${h.gmail_authorized ? "✓" : "—"}`;
-        $("demo-badge").classList.toggle("hidden", !h.demo);
-        $("demo-strip").classList.toggle("hidden", !h.demo);
-        $("auth-btn").classList.toggle("hidden", h.demo || h.gmail_authorized);
-      } catch { $("status-text").textContent = "sunucu yok"; }
-    }
-
-    $("auth-btn").addEventListener("click", async () => {
-      const b = $("auth-btn"); b.disabled = true; b.textContent = "Tarayıcı açılıyor…";
-      try { await fetch("/auth/login", { method: "POST" }); } catch {}
-      b.disabled = false; b.textContent = "Gmail'i bağla"; refreshStatus();
+  }
+  function renderSuggestions(){
+    const grid = $("suggest");
+    SUGGESTIONS.forEach(s => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "text-left text-sm bg-white border border-slate-200 rounded-xl px-3 py-2.5 hover:border-indigo-300 hover:shadow-sm transition flex items-center gap-2";
+      card.innerHTML = `<span class="text-base">${s.icon}</span><span class="text-slate-700">${esc(s.label)}</span>`;
+      card.onclick = () => send(s.text);
+      grid.appendChild(card);
     });
+  }
+  function autogrow(){ inputEl.style.height = "auto"; inputEl.style.height = Math.min(inputEl.scrollHeight, 128) + "px"; }
 
-    $("composer").addEventListener("submit", (e) => { e.preventDefault(); send(inputEl.value); });
-    inputEl.addEventListener("input", autogrow);
-    inputEl.addEventListener("keydown", (e) => {
-      if(e.key === "Enter" && !e.shiftKey){ e.preventDefault(); send(inputEl.value); }
+  /* ---------- memory ---------- */
+  let notes = [];
+  function memStatus(msg){
+    const el = $("mem-status");
+    el.textContent = msg;
+    if(msg) setTimeout(() => { if(el.textContent === msg) el.textContent = ""; }, 2500);
+  }
+  function renderNotes(){
+    const list = $("mem-list");
+    list.innerHTML = "";
+    $("mem-empty").classList.toggle("hidden", notes.length > 0);
+    $("mem-count").textContent = notes.length || "";
+    notes.forEach((n, i) => {
+      const li = document.createElement("li");
+      li.className = "fade-in group flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5";
+      li.innerHTML = `
+        <span class="w-1.5 h-1.5 shrink-0 rounded-full bg-violet-400"></span>
+        <span class="flex-1 text-sm text-slate-700 break-words min-w-0">${esc(n)}</span>
+        <button title="Sil" class="opacity-0 group-hover:opacity-100 transition text-slate-400 hover:text-red-500 shrink-0">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m1 0l-.8 12a1.2 1.2 0 01-1.2 1.1H8a1.2 1.2 0 01-1.2-1.1L6 7h12z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>`;
+      li.querySelector("button").onclick = async () => {
+        notes.splice(i, 1);
+        await saveNotes("Silindi ✓");
+      };
+      list.appendChild(li);
     });
+  }
+  async function loadMemory(){
+    try {
+      const d = await (await fetch("/api/memory")).json();
+      notes = d.notes || [];
+      renderNotes();
+    } catch { memStatus("Yüklenemedi"); }
+  }
+  async function loadMemoryCount(){
+    try {
+      const d = await (await fetch("/api/memory")).json();
+      notes = d.notes || [];
+      $("mem-count").textContent = notes.length || "";
+    } catch {}
+  }
+  async function saveNotes(okMsg){
+    try {
+      const r = await fetch("/api/memory", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes }),
+      });
+      const d = await r.json();
+      if(d.notes) notes = d.notes;
+      renderNotes();
+      memStatus(okMsg || "Kaydedildi ✓");
+    } catch { memStatus("Kaydedilemedi"); }
+  }
+  $("mem-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const v = $("mem-input").value.trim();
+    if(!v) return;
+    notes.push(v);
+    $("mem-input").value = "";
+    await saveNotes("Eklendi ✓");
+  });
 
-    renderSuggestions();
-    refreshStatus();
-    setInterval(refreshStatus, 15000);
-    inputEl.focus();
-  </script>
+  /* ---------- status ---------- */
+  async function refreshStatus(){
+    try {
+      const h = await (await fetch("/health")).json();
+      const ready = h.gmail_authorized && h.llm_reachable;
+      $("status-dot").className = "w-2 h-2 shrink-0 rounded-full " + (ready ? "bg-emerald-400" : "bg-amber-400");
+      $("status-text").textContent = h.demo
+        ? "Demo modu · hazır"
+        : `LLM ${h.llm_reachable ? "✓" : "✗"} · Gmail ${h.gmail_authorized ? "✓" : "—"}`;
+      $("demo-badge").classList.toggle("hidden", !h.demo);
+      $("demo-strip").classList.toggle("hidden", !h.demo);
+      $("auth-btn").classList.toggle("hidden", h.demo || h.gmail_authorized);
+    } catch { $("status-text").textContent = "sunucuya ulaşılamıyor"; }
+  }
+  $("auth-btn").addEventListener("click", async () => {
+    const b = $("auth-btn"); b.disabled = true; b.textContent = "Tarayıcı açılıyor…";
+    try { await fetch("/auth/login", { method: "POST" }); } catch {}
+    b.disabled = false; b.textContent = "Gmail'i bağla"; refreshStatus();
+  });
+
+  /* ---------- composer events ---------- */
+  $("composer").addEventListener("submit", (e) => { e.preventDefault(); send(inputEl.value); });
+  inputEl.addEventListener("input", autogrow);
+  inputEl.addEventListener("keydown", (e) => {
+    if(e.key === "Enter" && !e.shiftKey){ e.preventDefault(); send(inputEl.value); }
+  });
+
+  /* ---------- init ---------- */
+  renderSuggestions();
+  show("chat");
+  refreshStatus();
+  loadMemoryCount();
+  setInterval(refreshStatus, 15000);
+</script>
 </body>
 </html>

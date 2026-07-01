@@ -16,6 +16,7 @@ from typing import Any
 
 from app.demo.fake_gmail import ME, SEED
 from app.llm.base import LLMProvider, LLMResponse, ToolCall
+from app.memory import MemoryStore
 
 CATEGORY_LABELS = {
     "needs_reply": "🔴 Yanıt bekliyor",
@@ -71,6 +72,33 @@ class DemoLLMProvider(LLMProvider):
     name = "demo"
     uses_native_tools = True  # tool results come back as structured blocks
 
+    def __init__(self, memory: MemoryStore | None = None) -> None:
+        # Optional user-memory store: signature, default tone, standing notes.
+        self._memory = memory
+
+    # --- memory helpers ----------------------------------------------------
+
+    def _notes(self) -> list[str]:
+        return self._memory.get_notes() if self._memory else []
+
+    def _signature(self) -> str:
+        for n in self._notes():
+            if _fold(n).startswith("imza"):
+                _, _, value = n.partition(":")
+                if value.strip():
+                    return value.strip()
+        return ME
+
+    def _default_tone(self) -> str:
+        for n in self._notes():
+            f = _fold(n)
+            if "ton" in f:
+                if "resmi" in f or "formal" in f:
+                    return "formal"
+                if "samimi" in f or "friendly" in f or "sicak" in f:
+                    return "friendly"
+        return "neutral"
+
     def chat(
         self,
         messages: list[dict[str, Any]],
@@ -84,6 +112,10 @@ class DemoLLMProvider(LLMProvider):
             return LLMResponse(text=self._compose(name, result, user_text))
 
         intent = self._intent(user_text)
+        if intent == "memory_add":
+            return LLMResponse(text=self._memory_add(user_text))
+        if intent == "memory_show":
+            return LLMResponse(text=self._memory_show())
         if intent == "triage":
             return LLMResponse(
                 tool_calls=[ToolCall("list_recent_emails", {"max_results": 10}, "d1")]
@@ -161,6 +193,12 @@ class DemoLLMProvider(LLMProvider):
 
     def _intent(self, text: str) -> str:
         t = _fold(text)
+        if any(k in t for k in ["hafizana ekle", "hafizaya ekle", "aklinda tut",
+                                "unutma:", "not al:", "remember:"]):
+            return "memory_add"
+        if any(k in t for k in ["hafizanda ne", "hafizani goster", "neleri hatirliyorsun",
+                                "notlarin neler", "hafizan", "memory"]):
+            return "memory_show"
         draft_kw = ["taslak", "draft", "reply", "yanitla", "cevap yaz", "yanit yaz",
                     "e-posta yaz", "eposta yaz", "mail yaz", "email yaz"]
         if any(k in t for k in draft_kw):
@@ -202,7 +240,8 @@ class DemoLLMProvider(LLMProvider):
 
     def _draft_args(self, text: str) -> dict[str, Any]:
         t = _fold(text)
-        tone = "neutral"
+        # Memory sets the default tone; an explicit request overrides it.
+        tone = self._default_tone()
         if any(k in t for k in ["resmi", "formal"]):
             tone = "formal"
         elif any(k in t for k in ["samimi", "friendly", "sicak"]):
@@ -256,21 +295,57 @@ class DemoLLMProvider(LLMProvider):
             return "Teklif hakkında"
         return "Bilgilendirme"
 
-    @staticmethod
-    def _body(greet: str, gist: str, tone: str, short: bool) -> str:
+    def _body(self, greet: str, gist: str, tone: str, short: bool) -> str:
+        sig = self._signature()
         line = gist if gist else "Konuyla ilgili en kısa sürede size dönüş yapacağım."
         if not line.endswith((".", "!", "?")):
             line += "."
         line = line[0].upper() + line[1:] if line else line
         if tone == "formal":
-            opener, closer = f"Sayın {greet},", f"Saygılarımla,\n{ME}"
+            opener, closer = f"Sayın {greet},", f"Saygılarımla,\n{sig}"
         elif tone == "friendly":
-            opener, closer = f"Selam {greet},", f"Sevgiler,\n{ME}"
+            opener, closer = f"Selam {greet},", f"Sevgiler,\n{sig}"
         else:
-            opener, closer = f"Merhaba {greet},", f"İyi çalışmalar,\n{ME}"
+            opener, closer = f"Merhaba {greet},", f"İyi çalışmalar,\n{sig}"
         if short:
             return f"{opener}\n\n{line}\n\n{closer}"
         return f"{opener}\n\n{line}\n\nHerhangi bir sorunuz olursa memnuniyetle yardımcı olurum.\n\n{closer}"
+
+    # --- memory intents ----------------------------------------------------
+
+    def _memory_add(self, text: str) -> str:
+        if self._memory is None:
+            return "Hafıza bu modda kullanılamıyor."
+        note = text.split(":", 1)[1].strip() if ":" in text else ""
+        if not note:
+            # Strip the command phrase, keep the rest as the note.
+            t = text
+            for kw in ["hafızana ekle", "hafızaya ekle", "aklında tut", "unutma"]:
+                idx = _fold(t).find(_fold(kw))
+                if idx != -1:
+                    t = (t[:idx] + t[idx + len(kw):]).strip(" ,.:;")
+                    break
+            note = t.strip()
+        if not note:
+            return "Neyi hatırlamamı istersin? Örn: *hafızana ekle: imza: Burak Özkarabekir*"
+        self._memory.add_note(note)
+        return (
+            f"🧠 Hafızama ekledim: “{note}”\n\n"
+            "Bundan sonraki yanıt ve taslaklarımda bunu dikkate alacağım. "
+            "Notları soldaki **Hafıza** sekmesinden görüntüleyip düzenleyebilirsin."
+        )
+
+    def _memory_show(self) -> str:
+        notes = self._notes()
+        if not notes:
+            return (
+                "Hafızam şu an boş. Soldaki **Hafıza** sekmesinden not ekleyebilir "
+                "ya da bana *hafızana ekle: …* diyebilirsin."
+            )
+        lines = ["🧠 Hafızamda şunlar var:", ""]
+        lines += [f"  • {n}" for n in notes]
+        lines += ["", "Bunları soldaki **Hafıza** sekmesinden düzenleyebilirsin."]
+        return "\n".join(lines)
 
     # --- compose answers -------------------------------------------------
 
@@ -361,7 +436,8 @@ class DemoLLMProvider(LLMProvider):
             "  • *Bugün neler önemli?* — gelen kutusu triyajı\n"
             "  • *Q3 bütçe yazışmasını özetle* — konu özeti\n"
             "  • *David teklife döndü mü?* — yanıt kontrolü\n"
-            "  • *Ayşe'ye kısa, resmi bir yanıt taslağı yaz* — taslak (yalnızca taslak, asla göndermem)\n\n"
+            "  • *Ayşe'ye kısa, resmi bir yanıt taslağı yaz* — taslak (yalnızca taslak, asla göndermem)\n"
+            "  • *hafızana ekle: imza: Burak Özkarabekir* — kalıcı tercih kaydet\n\n"
             "_Demo modu: örnek verilerle çalışıyorum; gerçek Gmail'e bağlı değilim._"
         )
 

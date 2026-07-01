@@ -60,6 +60,11 @@ class Settings(BaseSettings):
     # MUST remain False for the MVP. Hermes never sends email; it only drafts.
     allow_send: bool = Field(default=False)
 
+    # --- User memory ---
+    # Small local JSON file of user-authored preference notes (signature, tone,
+    # standing instructions). Never email content, never credentials.
+    memory_path: str = "./hermes_memory.json"
+
     # --- Demo mode ---
     # When true, Hermes runs entirely on in-memory sample data with a scripted
     # LLM — no Google OAuth, no LM Studio, no API key. For UI/UX testing only.

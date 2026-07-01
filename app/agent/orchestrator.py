@@ -84,6 +84,7 @@ def run_agent(
     provider: LLMProvider,
     gmail: GmailClient,
     user_messages: list[dict[str, Any]],
+    memory_text: str | None = None,
 ) -> AgentResult:
     """Run the bounded tool-calling loop and return the assistant's reply.
 
@@ -92,11 +93,20 @@ def run_agent(
         gmail: a ready Gmail client (already authorized).
         user_messages: prior conversation as ``[{role, content}, ...]`` (the
             latest user turn last). Roles are ``user`` / ``assistant``.
+        memory_text: user-authored memory notes (rendered as a bullet list) to
+            honor in every reply — signature, tone preferences, standing
+            instructions. Injected into the system prompt.
     """
     system_prompt = SYSTEM_PROMPT
+    if memory_text:
+        system_prompt += (
+            "\n\nUser memory — durable preferences and standing instructions the "
+            "user has saved. Honor these in every reply and every draft (e.g. "
+            "signature, tone, language):\n" + memory_text
+        )
     if not provider.uses_native_tools:
         # Local models: drive tools via the JSON instruction in the prompt.
-        system_prompt = f"{SYSTEM_PROMPT}\n\n{toolkit.render_tools_for_prompt()}"
+        system_prompt = f"{system_prompt}\n\n{toolkit.render_tools_for_prompt()}"
 
     messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
     messages.extend(user_messages)

@@ -26,6 +26,8 @@ dist/
 *.sqlite3
 *.db
 hermes_cache.*
+# User memory notes (local user data, not for the repo)
+hermes_memory.json
 
 # ---- OS / editor ----
 .DS_Store

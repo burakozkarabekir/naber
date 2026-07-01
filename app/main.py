@@ -26,6 +26,7 @@ from app.agent import run_agent
 from app.config import LLMProviderName, Settings, get_settings
 from app.gmail import GmailClient
 from app.llm import build_provider
+from app.memory import MAX_NOTE_LEN, MAX_NOTES, MemoryStore
 from app.security import auth_google
 from app.security.redact import safe_meta
 
@@ -54,6 +55,11 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     tools_used: list[str] = []
+
+
+class MemoryRequest(BaseModel):
+    # Full replacement of the note list (simple + atomic for a single user).
+    notes: list[str] = Field(max_length=MAX_NOTES)
 
 
 # --- Setup helpers --------------------------------------------------------
@@ -134,14 +140,23 @@ def create_app() -> FastAPI:
 
     if settings.demo_mode:
         # Sample data + scripted LLM. Skip real provider/Gmail wiring entirely.
+        # Memory shows example defaults until the user saves their own notes.
         from app.demo import DemoLLMProvider, FakeGmailClient
 
         _emit_demo_notice()
-        app.state.llm = DemoLLMProvider()
+        app.state.memory = MemoryStore(
+            settings.memory_path,
+            defaults=[
+                "İmza: Burak",
+                "Varsayılan ton: resmi ve kısa",
+            ],
+        )
+        app.state.llm = DemoLLMProvider(memory=app.state.memory)
         app.state.gmail = FakeGmailClient()
     else:
         _emit_cloud_warning(settings)
         _emit_allow_send_notice(settings)
+        app.state.memory = MemoryStore(settings.memory_path)
         app.state.llm = build_provider(settings)
         app.state.gmail = None  # built lazily after authorization
 
@@ -189,6 +204,25 @@ def create_app() -> FastAPI:
         logger.info("auth_login %s", safe_meta(outcome="authorized"))
         return JSONResponse({"authorized": True})
 
+    # --- Memory -------------------------------------------------------------
+
+    @app.get("/api/memory")
+    def get_memory() -> JSONResponse:
+        """Return the user's memory notes (user-authored preferences only)."""
+        return JSONResponse({"notes": app.state.memory.get_notes()})
+
+    @app.put("/api/memory")
+    def put_memory(req: MemoryRequest) -> Any:
+        """Replace the memory notes. Content is never logged — counts only."""
+        if any(len((n or "").strip()) > MAX_NOTE_LEN for n in req.notes):
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"Each note must be at most {MAX_NOTE_LEN} characters."},
+            )
+        saved = app.state.memory.set_notes(req.notes)
+        logger.info("memory_update %s", safe_meta(count=len(saved)))
+        return JSONResponse({"notes": saved})
+
     # --- Chat -------------------------------------------------------------
 
     @app.post("/api/chat", response_model=ChatResponse)
@@ -214,7 +248,12 @@ def create_app() -> FastAPI:
         logger.info("chat %s", safe_meta(turns=len(history)))
 
         try:
-            result = run_agent(app.state.llm, gmail, history)
+            result = run_agent(
+                app.state.llm,
+                gmail,
+                history,
+                memory_text=app.state.memory.as_prompt(),
+            )
         except Exception as exc:  # noqa: BLE001 - surface type only
             logger.error("chat_error %s", safe_meta(error_type=type(exc).__name__))
             return JSONResponse(

@@ -67,10 +67,12 @@ app/
   agent/
     tools.py              # tool schemas + dispatch (read tools + create_draft)
     orchestrator.py       # bounded tool-calling loop + Hermes system prompt
+  memory/
+    store.py              # user memory notes (file-backed; injected into prompts)
   demo/
     fake_gmail.py         # in-memory sample mailbox (DEMO_MODE)
     provider.py           # scripted assistant (DEMO_MODE, no external LLM)
-  web/static/index.html   # chat UI (vanilla JS + Tailwind CDN)
+  web/static/index.html   # app UI: sidebar shell, chat + memory views
 tests/                    # mocked provider, security, demo, and app tests
 ```
 
@@ -190,6 +192,21 @@ Hermes replies in the user's language (Turkish when you write Turkish).
   anywhere. After creating a draft, Hermes tells you it was **not** sent, points
   you to **Gmail → Drafts**, and reminds you to review and send it manually.
 
+### Memory — durable user preferences
+
+The **Hafıza (Memory)** tab in the UI holds short, user-authored notes — your
+signature, preferred tone, standing instructions ("always reply in English",
+"keep replies short"). Hermes injects these into its system prompt, so **every
+reply and every draft honors them**. You can also add notes from chat:
+*"hafızana ekle: imza: Burak Özkarabekir"*.
+
+- Stored in a small local JSON file (`MEMORY_PATH`, gitignored). It contains
+  **only** user-authored preferences — never email content, never credentials.
+- In demo mode, example notes are shown until you save your own; the demo
+  assistant visibly honors the signature and default tone.
+- API: `GET /api/memory` → `{"notes":[...]}`, `PUT /api/memory` with
+  `{"notes":[...]}` (max 30 notes, 300 chars each).
+
 ### HTTP API
 
 | Endpoint | Method | Purpose |
@@ -198,6 +215,7 @@ Hermes replies in the user's language (Turkish when you write Turkish).
 | `/auth/status` | GET | whether a Gmail token is stored |
 | `/auth/login` | POST | run the interactive OAuth consent flow (opens a browser) |
 | `/api/chat` | POST | `{"messages":[{"role":"user","content":"..."}]}` → `{"reply","tools_used"}` |
+| `/api/memory` | GET/PUT | read / replace the user memory notes |
 | `/` , `/static/*` | GET | chat UI |
 
 The agent runs a **bounded** tool-calling loop (max 5 tool iterations) and
@@ -224,6 +242,7 @@ See `.env.example` for the full list. Key entries:
 | `APP_PORT` | `8000` | |
 | `ALLOW_SEND` | `false` | **must stay false for the MVP** |
 | `DEMO_MODE` | `false` | sample data + scripted assistant; no Google/LLM needed |
+| `MEMORY_PATH` | `./hermes_memory.json` | user memory notes (local file, gitignored) |
 | `LOG_LEVEL` | `INFO` | |
 
 ---
@@ -249,7 +268,7 @@ The suite (no network, all mocked) covers:
   `ALLOW_SEND=false` default.
 
 ```
-pytest        # 63 passing
+pytest        # 78 passing
 ```
 
 ---
