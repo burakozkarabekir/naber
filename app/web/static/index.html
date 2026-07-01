@@ -1,126 +1,228 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hermes — Email Assistant</title>
+  <title>Hermes — E-posta Asistanı</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+    body { background:
+      radial-gradient(1200px 600px at 100% -10%, #eef2ff 0%, transparent 55%),
+      radial-gradient(1000px 500px at -10% 110%, #f5f3ff 0%, transparent 50%),
+      #f8fafc; }
+    .msgs::-webkit-scrollbar { width: 8px; }
+    .msgs::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 9999px; }
+    .fade-in { animation: fade .28s ease both; }
+    @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .dot { width: 6px; height: 6px; border-radius: 9999px; background: #94a3b8; display: inline-block; animation: bounce 1.2s infinite; }
+    .dot:nth-child(2) { animation-delay: .15s; } .dot:nth-child(3) { animation-delay: .3s; }
+    @keyframes bounce { 0%,60%,100% { transform: translateY(0); opacity:.5 } 30% { transform: translateY(-5px); opacity:1 } }
+    .prose-mini strong { font-weight: 600; color: #0f172a; }
+    .prose-mini code { font-family: ui-monospace, monospace; }
+  </style>
 </head>
-<body class="bg-slate-100 text-slate-800">
-  <div class="max-w-3xl mx-auto h-screen flex flex-col p-4">
+<body class="min-h-screen text-slate-800">
+  <div class="max-w-2xl mx-auto h-screen flex flex-col px-3 sm:px-4">
+
     <!-- Header -->
-    <header class="flex items-center justify-between pb-3 border-b border-slate-300">
-      <div>
-        <h1 class="text-xl font-semibold text-slate-900">Hermes</h1>
-        <p class="text-xs text-slate-500">Secure email assistant — drafts only, never sends.</p>
+    <header class="flex items-center gap-3 pt-5 pb-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 grid place-items-center text-white text-lg shadow-lg shadow-indigo-500/20">✉️</div>
+      <div class="flex-1">
+        <div class="flex items-center gap-2">
+          <h1 class="text-lg font-semibold text-slate-900 leading-none">Hermes</h1>
+          <span id="demo-badge" class="hidden text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 border border-amber-200">Demo</span>
+        </div>
+        <p class="text-xs text-slate-400 mt-0.5">E-posta asistanı · taslak hazırlar, asla göndermez</p>
       </div>
-      <div class="flex items-center gap-2 text-sm">
-        <span id="status-dot" class="inline-block w-2.5 h-2.5 rounded-full bg-slate-400"></span>
-        <span id="status-text" class="text-slate-500">checking…</span>
-        <button id="auth-btn"
-          class="hidden ml-2 px-3 py-1 rounded bg-indigo-600 text-white text-xs hover:bg-indigo-700">
-          Authorize Gmail
-        </button>
+      <div class="flex items-center gap-2">
+        <span id="status-pill" class="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 bg-white/70 border border-slate-200 rounded-full px-2.5 py-1">
+          <span id="status-dot" class="w-2 h-2 rounded-full bg-slate-300"></span>
+          <span id="status-text">bağlanıyor…</span>
+        </span>
+        <button id="auth-btn" class="hidden px-3 py-1.5 rounded-full bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 shadow-sm">Gmail'i bağla</button>
       </div>
     </header>
 
+    <!-- Demo strip -->
+    <div id="demo-strip" class="hidden mb-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+      🧪 <b>Demo modu</b> — örnek verilerle çalışıyor, gerçek Gmail'e bağlı değil. Aşağıdaki önerilere tıklayarak deneyebilirsin.
+    </div>
+
     <!-- Messages -->
-    <main id="messages" class="flex-1 overflow-y-auto py-4 space-y-3"></main>
+    <main id="messages" class="msgs flex-1 overflow-y-auto py-2 space-y-4"></main>
+
+    <!-- Empty state -->
+    <section id="empty" class="flex-1 flex flex-col items-center justify-center text-center px-4">
+      <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 grid place-items-center text-white text-2xl shadow-xl shadow-indigo-500/25 mb-4">✉️</div>
+      <h2 class="text-xl font-semibold text-slate-900">Merhaba 👋</h2>
+      <p class="text-sm text-slate-500 mt-1 max-w-sm">Gelen kutunu triyaj edeyim, yazışmaları özetleyeyim ya da senin için bir yanıt <b>taslağı</b> hazırlayayım.</p>
+      <div id="suggest" class="grid sm:grid-cols-2 gap-2 mt-6 w-full max-w-lg"></div>
+    </section>
 
     <!-- Composer -->
-    <form id="composer" class="flex gap-2 pt-3 border-t border-slate-300">
-      <input id="input" type="text" autocomplete="off"
-        placeholder="Sorun: 'Bugün neler önemli?' / Ask: 'Summarize the thread about the budget'"
-        class="flex-1 rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-      <button type="submit" id="send-btn"
-        class="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50">
-        Send
-      </button>
+    <form id="composer" class="py-3">
+      <div id="chips" class="flex flex-wrap gap-1.5 mb-2"></div>
+      <div class="flex items-end gap-2 bg-white border border-slate-200 rounded-2xl p-1.5 shadow-sm focus-within:ring-2 focus-within:ring-indigo-400 focus-within:border-indigo-300 transition">
+        <textarea id="input" rows="1" placeholder="Bir şey sor… (ör. Bugün neler önemli?)"
+          class="flex-1 resize-none bg-transparent px-3 py-2 max-h-32 focus:outline-none text-sm placeholder:text-slate-400"></textarea>
+        <button type="submit" id="send-btn" title="Gönder"
+          class="w-9 h-9 shrink-0 rounded-xl bg-indigo-600 text-white grid place-items-center hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 12l16-8-5 16-3.5-6.5L4 12z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <p class="text-[11px] text-slate-400 text-center mt-1.5">Hermes yalnızca <b>taslak</b> oluşturur — hiçbir e-postayı otomatik göndermez.</p>
     </form>
   </div>
 
   <script>
-    // Conversation history kept client-side; the server is stateless.
-    const history = [];
-    const messagesEl = document.getElementById("messages");
-    const inputEl = document.getElementById("input");
-    const sendBtn = document.getElementById("send-btn");
-    const statusDot = document.getElementById("status-dot");
-    const statusText = document.getElementById("status-text");
-    const authBtn = document.getElementById("auth-btn");
+    const SUGGESTIONS = [
+      { icon: "📥", label: "Bugün neler önemli?", text: "Bugün neler önemli?" },
+      { icon: "🧾", label: "Q3 bütçe yazışmasını özetle", text: "Q3 bütçe yazışmasını özetle" },
+      { icon: "🔍", label: "David teklife döndü mü?", text: "David teklife döndü mü?" },
+      { icon: "✍️", label: "Ayşe'ye kısa, resmi yanıt taslağı", text: "Ayşe'ye kısa ve resmi bir yanıt taslağı yaz: rakamları Cuma göndereceğim." },
+    ];
 
-    function bubble(role, text) {
+    const history = [];
+    const $ = (id) => document.getElementById(id);
+    const messagesEl = $("messages"), emptyEl = $("empty"), inputEl = $("input"), sendBtn = $("send-btn");
+
+    function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+    function fmt(s){
+      let h = esc(s);
+      h = h.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+      h = h.replace(/(^|[^\*])\*(?!\s)([^*]+?)\*(?!\*)/g,'$1<em>$2</em>');
+      h = h.replace(/`([^`]+?)`/g,'<code class="px-1 rounded bg-slate-100 text-[.85em]">$1</code>');
+      return h;
+    }
+
+    function avatar(role){
+      const d = document.createElement("div");
+      if(role === "assistant"){
+        d.className = "w-8 h-8 shrink-0 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 text-white grid place-items-center text-sm shadow";
+        d.textContent = "H";
+      } else {
+        d.className = "w-8 h-8 shrink-0 rounded-lg bg-slate-200 text-slate-600 grid place-items-center text-xs font-semibold";
+        d.textContent = "Sen";
+      }
+      return d;
+    }
+
+    function row(role){
       const wrap = document.createElement("div");
-      wrap.className = role === "user" ? "flex justify-end" : "flex justify-start";
-      const b = document.createElement("div");
-      b.className = (role === "user"
-        ? "bg-indigo-600 text-white"
-        : "bg-white text-slate-800 border border-slate-200") +
-        " rounded-2xl px-4 py-2 max-w-[80%] whitespace-pre-wrap shadow-sm";
-      b.textContent = text;
-      wrap.appendChild(b);
+      wrap.className = "fade-in flex gap-2.5 " + (role === "user" ? "flex-row-reverse" : "");
+      const bubble = document.createElement("div");
+      bubble.className = (role === "user"
+        ? "bg-indigo-600 text-white rounded-2xl rounded-tr-sm"
+        : "bg-white text-slate-800 border border-slate-200 rounded-2xl rounded-tl-sm prose-mini")
+        + " px-3.5 py-2.5 max-w-[85%] text-sm leading-relaxed whitespace-pre-wrap shadow-sm";
+      wrap.appendChild(avatar(role));
+      wrap.appendChild(bubble);
       messagesEl.appendChild(wrap);
+      emptyEl.style.display = "none";
       messagesEl.scrollTop = messagesEl.scrollHeight;
+      return bubble;
+    }
+
+    function typingBubble(){
+      const b = row("assistant");
+      b.innerHTML = '<span class="dot"></span><span class="dot ml-1"></span><span class="dot ml-1"></span>';
       return b;
     }
 
-    async function refreshStatus() {
-      try {
-        const r = await fetch("/health");
-        const h = await r.json();
-        const ready = h.gmail_authorized && h.llm_reachable;
-        statusDot.className = "inline-block w-2.5 h-2.5 rounded-full " +
-          (ready ? "bg-green-500" : "bg-amber-400");
-        statusText.textContent =
-          `LLM: ${h.llm_provider}${h.llm_reachable ? " ✓" : " ✗"} · ` +
-          `Gmail: ${h.gmail_authorized ? "authorized" : "not authorized"}`;
-        authBtn.classList.toggle("hidden", !!h.gmail_authorized);
-      } catch {
-        statusText.textContent = "server unreachable";
-      }
+    function toolChips(bubble, tools){
+      if(!tools || !tools.length) return;
+      const wrap = document.createElement("div");
+      wrap.className = "flex flex-wrap gap-1 mt-2 pt-2 border-t border-slate-100";
+      tools.forEach(t => {
+        const c = document.createElement("span");
+        c.className = "text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded-full px-1.5 py-0.5";
+        c.textContent = "⚙︎ " + t;
+        wrap.appendChild(c);
+      });
+      bubble.appendChild(wrap);
     }
 
-    authBtn.addEventListener("click", async () => {
-      authBtn.disabled = true;
-      authBtn.textContent = "Opening browser…";
-      try {
-        await fetch("/auth/login", { method: "POST" });
-      } catch {}
-      authBtn.disabled = false;
-      authBtn.textContent = "Authorize Gmail";
-      refreshStatus();
-    });
-
-    document.getElementById("composer").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const text = inputEl.value.trim();
-      if (!text) return;
-      inputEl.value = "";
-      bubble("user", text);
+    async function send(text){
+      text = (text || "").trim();
+      if(!text) return;
+      row("user").textContent = text;
       history.push({ role: "user", content: text });
-
+      inputEl.value = ""; autogrow();
       sendBtn.disabled = true;
-      const thinking = bubble("assistant", "…");
+      const typing = typingBubble();
       try {
         const r = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+          method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ messages: history }),
         });
         const data = await r.json();
-        const reply = data.reply || data.error || "(no response)";
-        thinking.textContent = reply;
-        if (data.reply) history.push({ role: "assistant", content: data.reply });
-      } catch (err) {
-        thinking.textContent = "Request failed: " + err;
+        const reply = data.reply || data.error || "(yanıt yok)";
+        typing.innerHTML = fmt(reply);
+        toolChips(typing, data.tools_used);
+        if(data.reply) history.push({ role: "assistant", content: data.reply });
+      } catch(err){
+        typing.textContent = "İstek başarısız: " + err;
       } finally {
-        sendBtn.disabled = false;
-        inputEl.focus();
+        sendBtn.disabled = false; inputEl.focus();
+        messagesEl.scrollTop = messagesEl.scrollHeight;
       }
+    }
+
+    function renderSuggestions(){
+      const grid = $("suggest"), chips = $("chips");
+      SUGGESTIONS.forEach(s => {
+        const card = document.createElement("button");
+        card.type = "button";
+        card.className = "text-left text-sm bg-white border border-slate-200 rounded-xl px-3 py-2.5 hover:border-indigo-300 hover:shadow-sm transition flex items-center gap-2";
+        card.innerHTML = `<span class="text-base">${s.icon}</span><span class="text-slate-700">${esc(s.label)}</span>`;
+        card.onclick = () => send(s.text);
+        grid.appendChild(card);
+
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "text-xs text-slate-600 bg-white border border-slate-200 rounded-full px-2.5 py-1 hover:border-indigo-300 transition";
+        chip.textContent = s.icon + " " + s.label;
+        chip.onclick = () => send(s.text);
+        chips.appendChild(chip);
+      });
+    }
+
+    function autogrow(){ inputEl.style.height = "auto"; inputEl.style.height = Math.min(inputEl.scrollHeight, 128) + "px"; }
+
+    async function refreshStatus(){
+      try {
+        const h = await (await fetch("/health")).json();
+        $("status-pill").classList.remove("hidden");
+        const ready = h.gmail_authorized && h.llm_reachable;
+        $("status-dot").className = "w-2 h-2 rounded-full " + (ready ? "bg-green-500" : "bg-amber-400");
+        $("status-text").textContent = h.demo
+          ? "demo · hazır"
+          : `LLM ${h.llm_reachable ? "✓" : "✗"} · Gmail ${h.gmail_authorized ? "✓" : "—"}`;
+        $("demo-badge").classList.toggle("hidden", !h.demo);
+        $("demo-strip").classList.toggle("hidden", !h.demo);
+        $("auth-btn").classList.toggle("hidden", h.demo || h.gmail_authorized);
+      } catch { $("status-text").textContent = "sunucu yok"; }
+    }
+
+    $("auth-btn").addEventListener("click", async () => {
+      const b = $("auth-btn"); b.disabled = true; b.textContent = "Tarayıcı açılıyor…";
+      try { await fetch("/auth/login", { method: "POST" }); } catch {}
+      b.disabled = false; b.textContent = "Gmail'i bağla"; refreshStatus();
     });
 
+    $("composer").addEventListener("submit", (e) => { e.preventDefault(); send(inputEl.value); });
+    inputEl.addEventListener("input", autogrow);
+    inputEl.addEventListener("keydown", (e) => {
+      if(e.key === "Enter" && !e.shiftKey){ e.preventDefault(); send(inputEl.value); }
+    });
+
+    renderSuggestions();
     refreshStatus();
     setInterval(refreshStatus, 15000);
+    inputEl.focus();
   </script>
 </body>
 </html>

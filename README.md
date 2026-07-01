@@ -67,13 +67,40 @@ app/
   agent/
     tools.py              # tool schemas + dispatch (read tools + create_draft)
     orchestrator.py       # bounded tool-calling loop + Hermes system prompt
-  web/static/index.html   # minimal chat UI (vanilla JS + Tailwind CDN)
-tests/                    # mocked provider + security tests
+  demo/
+    fake_gmail.py         # in-memory sample mailbox (DEMO_MODE)
+    provider.py           # scripted assistant (DEMO_MODE, no external LLM)
+  web/static/index.html   # chat UI (vanilla JS + Tailwind CDN)
+tests/                    # mocked provider, security, demo, and app tests
 ```
 
 ---
 
-## Setup
+## ⚡ Quickest way to try it — Demo mode (no Google, no LLM)
+
+Demo mode runs Hermes on **in-memory sample data** with a scripted assistant, so
+you can click through triage / summarize / draft **without** any Google account,
+LM Studio, or API key.
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+DEMO_MODE=true uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Open **http://127.0.0.1:8000** and click a suggestion (or type):
+- *Bugün neler önemli?* — inbox triage
+- *Q3 bütçe yazışmasını özetle* — thread summary
+- *David teklife döndü mü?* — reply check
+- *Ayşe'ye kısa, resmi bir yanıt taslağı yaz* — creates a draft (never sends)
+
+> Demo mode uses sample data only — it never touches a real mailbox and, like the
+> real app, only ever creates drafts. Set `DEMO_MODE=false` (default) for the real
+> Gmail + LLM flow below. You can also set it in `.env`.
+
+---
+
+## Setup (real Gmail + LLM)
 
 ### 1. Python environment
 
@@ -196,6 +223,7 @@ See `.env.example` for the full list. Key entries:
 | `APP_HOST` | `127.0.0.1` | localhost only — enforced in code |
 | `APP_PORT` | `8000` | |
 | `ALLOW_SEND` | `false` | **must stay false for the MVP** |
+| `DEMO_MODE` | `false` | sample data + scripted assistant; no Google/LLM needed |
 | `LOG_LEVEL` | `INFO` | |
 
 ---
@@ -221,7 +249,7 @@ The suite (no network, all mocked) covers:
   `ALLOW_SEND=false` default.
 
 ```
-pytest        # 52 passing
+pytest        # 63 passing
 ```
 
 ---

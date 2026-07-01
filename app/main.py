@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 from app.agent import run_agent
 from app.config import LLMProviderName, Settings, get_settings
 from app.gmail import GmailClient
-from app.llm import LLMProvider, build_provider
+from app.llm import build_provider
 from app.security import auth_google
 from app.security.redact import safe_meta
 
@@ -113,18 +113,37 @@ def _get_gmail(app: FastAPI) -> GmailClient:
     return app.state.gmail
 
 
+def _emit_demo_notice() -> None:
+    banner = (
+        "\n" + "=" * 72 + "\n"
+        "  HERMES: DEMO MODE — sample data, scripted assistant.\n"
+        "  No Google account, no LM Studio, no API key. Not a real mailbox.\n"
+        "  Open the UI and click a suggestion to try triage / summary / draft.\n"
+        + "=" * 72 + "\n"
+    )
+    print(banner)
+    logger.info("Demo mode active: sample data only, no external services.")
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     _configure_logging(settings.log_level)
-    _emit_cloud_warning(settings)
-    _emit_allow_send_notice(settings)
 
-    app = FastAPI(title="Hermes", version="0.2.0-phase2")
-
-    provider: LLMProvider = build_provider(settings)
+    app = FastAPI(title="Hermes", version="0.3.0-demo")
     app.state.settings = settings
-    app.state.llm = provider
-    app.state.gmail = None  # built lazily after authorization
+
+    if settings.demo_mode:
+        # Sample data + scripted LLM. Skip real provider/Gmail wiring entirely.
+        from app.demo import DemoLLMProvider, FakeGmailClient
+
+        _emit_demo_notice()
+        app.state.llm = DemoLLMProvider()
+        app.state.gmail = FakeGmailClient()
+    else:
+        _emit_cloud_warning(settings)
+        _emit_allow_send_notice(settings)
+        app.state.llm = build_provider(settings)
+        app.state.gmail = None  # built lazily after authorization
 
     # --- Health -----------------------------------------------------------
 
@@ -136,12 +155,14 @@ def create_app() -> FastAPI:
         except Exception as exc:  # noqa: BLE001 - report type only
             logger.warning("LLM ping raised: %s", type(exc).__name__)
 
+        gmail_authorized = True if settings.demo_mode else auth_google.has_token()
         return JSONResponse(
             {
                 "status": "ok",
-                "llm_provider": settings.llm_provider.value,
+                "demo": settings.demo_mode,
+                "llm_provider": "demo" if settings.demo_mode else settings.llm_provider.value,
                 "llm_reachable": llm_ok,
-                "gmail_authorized": auth_google.has_token(),
+                "gmail_authorized": gmail_authorized,
                 "allow_send": settings.allow_send,  # must be false for the MVP
             }
         )
@@ -213,8 +234,9 @@ def create_app() -> FastAPI:
             return FileResponse(str(_STATIC_DIR / "index.html"))
 
     logger.info(
-        "Hermes started (provider=%s, allow_send=%s).",
-        settings.llm_provider.value,
+        "Hermes started (provider=%s, demo=%s, allow_send=%s).",
+        "demo" if settings.demo_mode else settings.llm_provider.value,
+        settings.demo_mode,
         settings.allow_send,
     )
     return app

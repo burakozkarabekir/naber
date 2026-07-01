@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     # MUST remain False for the MVP. Hermes never sends email; it only drafts.
     allow_send: bool = Field(default=False)
 
+    # --- Demo mode ---
+    # When true, Hermes runs entirely on in-memory sample data with a scripted
+    # LLM — no Google OAuth, no LM Studio, no API key. For UI/UX testing only.
+    # Never enable against a real mailbox; it ignores real Gmail entirely.
+    demo_mode: bool = Field(default=False)
+
     log_level: str = "INFO"
 
     @property
